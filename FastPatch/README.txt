@@ -1,1 +1,1 @@
-To run, simply place all included files in your StarCitizen\Public or StarCitizen\Test directory, and then run BuildXPLOR.exe
+To run, simply place all included files in your StarCitizen\Public or StarCitizen\Test directory, and then run FastPatch.exe
