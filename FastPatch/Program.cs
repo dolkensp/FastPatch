@@ -155,11 +155,11 @@ namespace FastPatch
                             {
                                 outLines.Add(patcherLine);
                             }
+
+                            patcherState.Delete();
+
+                            File.AppendAllLines(patcherState.FullName, outLines);
                         }
-
-                        patcherState.Delete();
-
-                        File.AppendAllLines(patcherState.FullName, outLines);
                     }
                 }
                 
