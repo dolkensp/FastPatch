@@ -111,7 +111,7 @@ namespace FastPatch
                     Console.WriteLine();
                     Console.WriteLine($"Download of {universe.Name} complete");
 
-                    FileInfo patcherState = new FileInfo(Path.Combine(destinationPath, "../Patcher/PatcherState"));
+                    FileInfo patcherState = new FileInfo(Path.Combine(destinationPath, @"..\..\Patcher\PatcherState"));
 
                     if (!patcherState.Exists) Console.WriteLine("Unable to locate PatcherState - you will need to manually update the PatcherState file, or run a verify");
 
@@ -159,11 +159,9 @@ namespace FastPatch
 
                         patcherState.Delete();
 
-                        File.AppendAllLines(patcherState.FullName, patcherLines);
+                        File.AppendAllLines(patcherState.FullName, outLines);
                     }
                 }
-
-                Console.WriteLine($"Searching for {directory.Name} universe");
                 
                 Thread.Sleep(10000);
             }
