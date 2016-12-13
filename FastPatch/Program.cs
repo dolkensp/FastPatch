@@ -11,24 +11,14 @@ namespace FastPatch
 {
     class Program
     {
-        public const int MAX_THREADS = 8;
+        public const int MAX_THREADS = 1;
 
-        static void Main(String[] args)
+        static void Main(String[] args) => Program.Run();
+
+        private static LauncherInfo GetLauncherInfo()
         {
-            Program.DownloadPatch(Environment.CurrentDirectory);
-        }
-
-        public static void DownloadPatch(String destinationPath)
-        {
-            Int32 i = 0;
-            DirectoryInfo directory = new DirectoryInfo(destinationPath);
-
-            if (!directory.Exists) directory.Create();
-
             using (WebClient webClient = new WebClient())
             {
-                Console.WriteLine("Loading LauncherInfo");
-
                 LauncherInfo launcherInfo = new LauncherInfo { };
 
                 String[] launcherInfoLines = webClient.DownloadString("http://manifest.robertsspaceindustries.com/Launcher/_LauncherInfo").Split(new Char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
@@ -56,115 +46,214 @@ namespace FastPatch
                     }
                 }
 
-                Console.WriteLine("LauncherInfo Loaded");
+                return launcherInfo;
+            }
+        }
 
-                if (launcherInfo.Universes.ContainsKey(directory.Name))
-                {
-                    Universe universe = launcherInfo.Universes[directory.Name];
+        public static Manifest GetManifest(String fileIndex)
+        {
+            using (WebClient webClient = new WebClient())
+            {
+                Manifest manifest = webClient.DownloadString(fileIndex).FromJSON<Manifest>();
 
-                    Console.Title = $"Downloading latest {universe.Name} build";
+                return manifest;
+            }
+        }
 
-                    Console.WriteLine($"{universe.Name} build found - now downloading");
-                    Console.WriteLine();
+        public static void DownloadPatch(Manifest manifest, String destinationPath = null)
+        {
+            if (String.IsNullOrWhiteSpace(destinationPath)) destinationPath = Environment.CurrentDirectory;
 
-                    Manifest manifest = webClient.DownloadString(universe.FileIndex).FromJSON<Manifest>();
+            using (WebClient webClient = new WebClient())
+            {
+                Int32 i = 0;
 
-                    String[] fileList = manifest.FileList;
-
-                    Parallel.ForEach(
-                        Enumerable.Range(0, fileList.Length), 
-                        new ParallelOptions { MaxDegreeOfParallelism = MAX_THREADS }, 
-                        j =>
-                        {
-                            String file = fileList[j];
-                            Boolean success = false;
-
-                            while (!success)
-                            {
-                                try
-                                {
-                                    using (WebClient fileClient = new WebClient())
-                                    {
-                                        FileInfo targetFile = new FileInfo(Path.Combine(destinationPath, file));
-
-                                        if (!targetFile.Directory.Exists) targetFile.Directory.Create();
-                                        if (targetFile.Exists) targetFile.Delete();
-
-                                        fileClient.DownloadFile(String.Format("{0}/{1}/{2}", manifest.WebseedUrls[i++ % manifest.WebseedUrls.Length], manifest.KeyPrefix, file), targetFile.FullName);
-
-                                        Console.WriteLine("Completed File: {0}", file);
-
-                                        success = true;
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Console.WriteLine("Error Downloading File: {0}", file);
-
-                                    Thread.Sleep(5000);
-                                }
-                            }
-                        });
-
-                    Console.Title = $"Download of {universe.Name} complete";
-
-                    Console.WriteLine();
-                    Console.WriteLine($"Download of {universe.Name} complete");
-
-                    FileInfo patcherState = new FileInfo(Path.Combine(destinationPath, @"..\..\Patcher\PatcherState"));
-
-                    if (!patcherState.Exists) Console.WriteLine("Unable to locate PatcherState - you will need to manually update the PatcherState file, or run a verify");
-
-                    if (patcherState.Exists)
+                Parallel.ForEach(
+                    Enumerable.Range(0, manifest.FileList.Length),
+                    new ParallelOptions { MaxDegreeOfParallelism = MAX_THREADS },
+                    j =>
                     {
-                        var patcherLines = File.ReadAllLines(patcherState.FullName);
+                        String file = manifest.FileList[j];
+                        Boolean success = false;
 
-                        List<String> outLines = new List<String> { };
-
-                        foreach (String patcherLine in patcherLines)
+                        while (!success)
                         {
-                            if (patcherLine.StartsWith($"{universe.Name}_downloadFinished", StringComparison.InvariantCultureIgnoreCase))
+                            try
                             {
-                                outLines.Add($"{universe.Name}_downloadFinished = true");
-                            }
-                            else if (patcherLine.StartsWith($"{universe.Name}_oldVersion", StringComparison.InvariantCultureIgnoreCase))
-                            {
-                                outLines.Add($"{universe.Name}_oldVersion = {universe.Version}");
-                            }
-                            else if (patcherLine.StartsWith($"{universe.Name}_version", StringComparison.InvariantCultureIgnoreCase))
-                            {
-                                outLines.Add($"{universe.Name}_version = {universe.Version}");
-                            }
-                            else if (patcherLine.StartsWith($"{universe.Name}_fileIndex", StringComparison.InvariantCultureIgnoreCase))
-                            {
-                                outLines.Add($"{universe.Name}_fileIndex = {universe.FileIndex}");
-                            }
-                            else if (patcherLine.StartsWith($"{universe.Name}_installed", StringComparison.InvariantCultureIgnoreCase))
-                            {
-                                outLines.Add($"{universe.Name}_installed = true");
-                            }
-                            else if (patcherLine.StartsWith($"{universe.Name}_checking", StringComparison.InvariantCultureIgnoreCase))
-                            {
-                                outLines.Add($"{universe.Name}_checking = false");
-                            }
-                            else if (patcherLine.StartsWith($"{universe.Name}_universeServer", StringComparison.InvariantCultureIgnoreCase))
-                            {
-                                outLines.Add($"{universe.Name}_universeServer = {universe.UniverseServer}");
-                            }
-                            else
-                            {
-                                outLines.Add(patcherLine);
-                            }
+                                using (WebClient fileClient = new WebClient())
+                                {
+                                    FileInfo targetFile = new FileInfo(Path.Combine(destinationPath, file));
 
-                            patcherState.Delete();
+                                    if (!targetFile.Directory.Exists) targetFile.Directory.Create();
+                                    if (targetFile.Exists) targetFile.Delete();
 
-                            File.AppendAllLines(patcherState.FullName, outLines);
+                                    fileClient.DownloadFile(String.Format("{0}/{1}/{2}", manifest.WebseedUrls[i++ % manifest.WebseedUrls.Length], manifest.KeyPrefix, file), targetFile.FullName);
+
+                                    Console.WriteLine("Completed File: {0}", file);
+
+                                    success = true;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine("Error Downloading File: {0}", file);
+
+                                Thread.Sleep(5000);
+                            }
                         }
+                    });
+            }
+        }
+
+        public static void UpdatePatcherState(Universe universe, String destinationPath = null)
+        {
+            FileInfo patcherState = new FileInfo(Path.Combine(destinationPath, @"..\..\Patcher\PatcherState"));
+
+            if (!patcherState.Exists) Console.WriteLine("Unable to locate PatcherState - you will need to manually update the PatcherState file, or run a verify.");
+
+            if (patcherState.Exists)
+            {
+                Console.WriteLine("Updating PatcherState to skip verify process.");
+
+                try
+                {
+                    var patcherLines = File.ReadAllLines(patcherState.FullName);
+
+                    List<String> outLines = new List<String> { };
+
+                    foreach (String patcherLine in patcherLines)
+                    {
+                        if (patcherLine.StartsWith($"{universe.Name}_downloadFinished", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            outLines.Add($"{universe.Name}_downloadFinished = true");
+                        }
+                        else if (patcherLine.StartsWith($"{universe.Name}_oldVersion", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            outLines.Add($"{universe.Name}_oldVersion = {universe.Version}");
+                        }
+                        else if (patcherLine.StartsWith($"{universe.Name}_version", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            outLines.Add($"{universe.Name}_version = {universe.Version}");
+                        }
+                        else if (patcherLine.StartsWith($"{universe.Name}_fileIndex", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            outLines.Add($"{universe.Name}_fileIndex = {universe.FileIndex}");
+                        }
+                        else if (patcherLine.StartsWith($"{universe.Name}_installed", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            outLines.Add($"{universe.Name}_installed = true");
+                        }
+                        else if (patcherLine.StartsWith($"{universe.Name}_checking", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            outLines.Add($"{universe.Name}_checking = false");
+                        }
+                        else if (patcherLine.StartsWith($"{universe.Name}_universeServer", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            outLines.Add($"{universe.Name}_universeServer = {universe.UniverseServer}");
+                        }
+                        else
+                        {
+                            outLines.Add(patcherLine);
+                        }
+
+                        patcherState.Delete();
+
+                        File.AppendAllLines(patcherState.FullName, outLines);
+                    }
+
+                    Console.WriteLine("PatcherState update complete - you can now launch StarCitizen.");
+                }
+                catch (Exception)
+                {
+                    Console.WriteLine("Unable to update PatcherState - you will need to manually update the PatcherState file, or run a verify.");
+                }
+            }
+        }
+
+        public static void Run()
+        {
+            // if (false)
+            // {
+            //     var buildNo = 485232;
+            // 
+            //     universe.Version = $"2.6.0 - {buildNo} - PTU";
+            //     universe.FileIndex = $"http://1.webseed.robertsspaceindustries.com/FileIndex/sc-alpha-2.6.0/{buildNo}.json";
+            // }
+
+            String destinationPath = Environment.CurrentDirectory;
+
+            // destinationPath = @"O:\Games\StarCitizen\StarCitizen\Test";
+
+            Console.Clear();
+
+            DirectoryInfo directory = new DirectoryInfo(destinationPath);
+
+            if (!directory.Exists) directory.Create();
+
+            Console.WriteLine("Loading LauncherInfo.");
+
+            var launcherInfo = Program.GetLauncherInfo();
+
+            Console.WriteLine("LauncherInfo Loaded.");
+
+            if (launcherInfo.Universes.ContainsKey(directory.Name))
+            {
+                var oldVerse = launcherInfo.Universes[directory.Name];
+                var newVerse = launcherInfo.Universes[directory.Name];
+
+                Console.Title = $"Current {oldVerse.Name} build is {oldVerse.Version}";
+
+                if (newVerse.FileIndex == oldVerse.FileIndex)
+                {
+                    Console.WriteLine("Waiting for new build.");
+                    Console.WriteLine();
+                    Console.WriteLine("Press any key to force download of the current build...");
+                }
+
+                Console.WriteLine();
+
+                var i = 0;
+
+                var cursorTop = Console.CursorTop;
+
+                while (newVerse.FileIndex == oldVerse.FileIndex && !Console.KeyAvailable)
+                {
+                    var points = String.Join("", Enumerable.Range(1, i % 4).Select(c => '.'));
+
+                    Console.SetCursorPosition(0, cursorTop);
+                    Console.WriteLine($"Waiting {points}   ");
+
+                    Thread.Sleep(1000);
+
+                    if (i++ % 10 == 0)
+                    {
+                        launcherInfo = Program.GetLauncherInfo();
+                        newVerse = launcherInfo.Universes[directory.Name];
                     }
                 }
-                
-                Thread.Sleep(10000);
+
+                Console.SetCursorPosition(0, cursorTop);
+
+                Console.Title = $"Current {newVerse.Name} build is {newVerse.Version}";
+
+                Console.WriteLine($"{newVerse.Name} build {newVerse.Version} found - now downloading.");
+                Console.WriteLine();
+
+                var manifest = Program.GetManifest(newVerse.FileIndex);
+
+                Program.DownloadPatch(manifest, destinationPath);
+
+                Console.Title = $"Download of {newVerse.Name} complete.";
+
+                Console.WriteLine();
+                Console.WriteLine($"Download of {newVerse.Name} complete.");
+
+                Console.WriteLine();
+
+                Program.UpdatePatcherState(newVerse, destinationPath);
             }
+                
+            Thread.Sleep(10000);
         }
     }
 
