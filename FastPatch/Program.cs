@@ -11,7 +11,7 @@ namespace FastPatch
 {
     class Program
     {
-        public const int MAX_THREADS = 1;
+        public const int MAX_THREADS = 8;
 
         static void Main(String[] args) => Program.Run();
 
@@ -185,6 +185,7 @@ namespace FastPatch
             // destinationPath = @"O:\Games\StarCitizen\StarCitizen\Test";
 
             Console.Clear();
+            Console.CursorVisible = false;
 
             DirectoryInfo directory = new DirectoryInfo(destinationPath);
 
@@ -240,6 +241,8 @@ namespace FastPatch
                 Console.WriteLine();
 
                 var manifest = Program.GetManifest(newVerse.FileIndex);
+
+                Console.Title = $"Downloading {newVerse.Name} build {newVerse.Version}";
 
                 Program.DownloadPatch(manifest, destinationPath);
 
